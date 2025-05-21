@@ -1,0 +1,16 @@
+{
+    "solution": "C:/Users/IOrlo/OneDrive/Рабочий стол/Орлов/solution.csv",
+    "coo": "C:/Users/IOrlo/OneDrive/Рабочий стол/Орлов/coo.csv",
+    "true_coords": [
+        2847320.09,
+        2194158.64,
+        5251366.4
+    ],
+    "true_speeds": [
+        0.0,
+        0.0,
+        0.0
+    ],
+    "min_stroka": "10",
+    "max_stroka": "150"
+}

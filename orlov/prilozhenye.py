@@ -1,117 +1,257 @@
-import numpy as np
-import matplotlib.pyplot as plt
-import tkinter as tk
-from tkinter import filedialog
 import os
+from statistics import stdev
+import tkinter as tk
+from tkinter import ttk
+from tkinter import filedialog
+import csv
+import json
+import tkinter.messagebox as messagebox
+import tkinter.filedialog as filedialog
+from tkinter import messagebox
+from docx import Document
+from docx.shared import Inches
+import shutil
 
-def simple_linear_regression(x, y):
-    x_mean = np.mean(x)
-    y_mean = np.mean(y)
-    slope = np.sum((x - x_mean) * (y - y_mean)) / np.sum((x - x_mean) ** 2)
-    intercept = y_mean - slope * x_mean
-    return slope, intercept
+from main import *
+from graphs import *
+import os
+import pandas as pd
 
-def process_mk_file(filepath):
-    data = np.loadtxt(filepath)
-    omega = data[:, 0]  # Угловая скорость (°/с)
-    voltage = data[:, 1]  # Напряжение (мВ)
 
-    # Масштабный коэффициент
-    scale = voltage / omega
-    avg_scale = np.mean(scale)
+def save_data_to_json(key, data):
+    """
+    Сохраняет данные в JSON файл под указанным ключом.
+    
+    :param key: Ключ для записи данных (например, 'true_coords', 'true_speeds')
+    :param data: Данные для сохранения (например, кортеж с координатами или скоростями)
+    """
+    try:
+        # Загружаем существующие данные из paths.json
+        with open('paths_and_coords.json', 'r', encoding='utf-8') as f:
+            data_file = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        data_file = {}  # Если файл не существует или пустой, создаем новый словарь
 
-    # Нелинейность
-    ideal_voltage = avg_scale * omega
-    nonlinearity = 100 * np.abs((voltage - ideal_voltage) / ideal_voltage)
-    avg_nonlinearity = np.mean(nonlinearity)
+    # Обновляем данные по ключу
+    data_file[key] = data
 
-    # Асимметрия
-    pos = scale[omega > 0]
-    neg = scale[omega < 0]
-    asymmetry = 100 * np.abs(np.mean(pos) - np.mean(neg)) / avg_scale
+    # Сохраняем данные обратно в JSON файл
+    with open('paths_and_coords.json', 'w', encoding='utf-8') as f:
+        json.dump(data_file, f, indent=4, ensure_ascii=False)
 
-    # Смещение нуля
-    bias = voltage[omega == 0]
-    if len(bias) > 0:
-        zero_offset = np.mean(bias) / avg_scale
+    print(f"Данные сохранены: {key} -> {data}")
+
+def read_json(file_name):
+    """
+    Считывает данные из json файла и возвращает словарь.
+    """
+    try:
+        with open(file_name, 'r', encoding='utf-8') as file:
+            data = json.load(file)
+        return data
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"Ошибка при чтении файла {file_name}: {e}")
+        return {}  # Возвращаем пустой словарь в случае ошибки
+
+
+def analyze():
+    """Обновленный метод анализа с фильтрацией нулевых строк."""
+    data = read_json("paths_and_coords.json")
+    
+    # Проверяем, существует ли ключ "solution"
+    if "solution" in data:
+        solution_file = data["solution"]
+        # Прочее выполнение анализа
     else:
-        zero_offset = 0
+        print("Ошибка: ключ 'solution' отсутствует в данных")
 
-    # Графики
-    plt.figure(figsize=(10, 5))
-    plt.subplot(1, 2, 1)
-    plt.plot(omega, voltage, label="Измерения")
-    plt.plot(omega, ideal_voltage, label="Идеальная прямая", linestyle='--')
-    plt.xlabel("Угловая скорость (°/с)")
-    plt.ylabel("Выходное напряжение (мВ)")
-    plt.title("Масштабный коэффициент")
-    plt.legend()
 
-    plt.subplot(1, 2, 2)
-    plt.plot(omega, nonlinearity)
-    plt.xlabel("Угловая скорость (°/с)")
-    plt.ylabel("Нелинейность (%)")
-    plt.title("Нелинейность МК")
+#-----------------------------------------------------------------------------------------------------------------------------#
+                                                        #Интерфейс программы
+#-----------------------------------------------------------------------------------------------------------------------------#
 
-    plt.tight_layout()
-    plt.show()
 
-    return avg_scale, avg_nonlinearity, asymmetry, zero_offset
 
-def process_drift_file(filepath):
-    data = np.loadtxt(filepath)
-    time = data[:, 0]  # Время (сек)
-    rate = data[:, 1]  # Угловая скорость (°/с)
+class Windows(tk.Tk):
+    def __init__(self, *args, **kwargs):
+        tk.Tk.__init__(self, *args, **kwargs)
+        self.wm_title("Расчет и синтез приборов")
+        self.center_window(900, 700)
+        self.resizable(False, False)
 
-    # Смещение нуля
-    bias = np.mean(rate)
+        container = tk.Frame(self)
+        container.pack(side="top", fill="both", expand=True)
+        container.grid_rowconfigure(0, weight=1)
+        container.grid_columnconfigure(0, weight=1)
 
-    # Тренд — в °/ч/ч
-    slope, _ = simple_linear_regression(time, rate)
-    trend = slope * 3600  # т.к. 1 ч = 3600 сек
+        self.frames = {}
+        for F in [DataInputPage, ]:
+            frame = F(container, self)
+            self.frames[F] = frame
+            frame.grid(row=0, column=0, sticky="nsew")
 
-    # График дрейфа
-    plt.figure(figsize=(8, 4))
-    plt.plot(time, rate, label="Сырые данные")
-    plt.plot(time, slope * time + bias, linestyle='--', label="Тренд")
-    plt.xlabel("Время (с)")
-    plt.ylabel("Угловая скорость (°/с)")
-    plt.title("Дрейф гироскопа")
-    plt.legend()
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show()
+        self.show_frame(DataInputPage)
 
-    return bias, trend
 
-def select_file(title="Выберите файл"):
-    root = tk.Tk()
-    root.withdraw()
-    filepath = filedialog.askopenfilename(title=title, filetypes=[("DAT files", "*.dat"), ("All files", "*.*")])
-    return filepath
+    def center_window(self, width, height):
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+        x = (screen_width // 2) - (width // 2)
+        y = (screen_height // 2) - (height // 2)
+        self.geometry(f'{width}x{height}+{x}+{y}')
 
-def main():
-    print("Выберите файл МК.dat")
-    mk_path = select_file("Выберите файл с масштабным коэффициентом (МК.dat)")
-    if not mk_path:
-        print("Файл не выбран.")
-        return
+    def show_frame(self, cont):
+        frame = self.frames[cont]
+        frame.tkraise()
 
-    scale, nonlinearity, asymmetry, bias_offset = process_mk_file(mk_path)
-    print(f"\n📏 Масштабный коэффициент: {scale:.3f} мВ/(°/с)")
-    print(f"📉 Средняя нелинейность: {nonlinearity:.2f}%")
-    print(f"⚖️  Асимметрия: {asymmetry:.2f}%")
-    print(f"🎯 Смещение нуля: {bias_offset:.3f} °/с")
+class DataInputPage(tk.Frame):
+    def __init__(self, parent, controller):
+        tk.Frame.__init__(self, parent)
+        self.controller = controller
 
-    print("\nВыберите файл Дрейф.dat")
-    drift_path = select_file("Выберите файл с дрейфом (Дрейф.dat)")
-    if not drift_path:
-        print("Файл не выбран.")
-        return
+  
+        label = tk.Label(self, text="Интерфейс управления")
+        label.grid(row=0, column=1,  padx=10, pady=10)
+        label = tk.Label(self, text="Ввод и обработка данных")
+        label.grid(row=0, column=0,  padx=10, pady=10)
 
-    bias, trend = process_drift_file(drift_path)
-    print(f"\n🌀 Смещение нуля: {bias:.4f} °/с")
-    print(f"📈 Тренд (дрейф): {trend:.4f} °/ч/ч")
+            
+
+        self.upload_button_solution = tk.Button(self, text="Загрузить файл дрейфа", command=self.upload_file_dreif, width=27) #solution
+        self.upload_button_solution.grid(row=3, column=0, padx=10, pady=10)
+
+        self.upload_button_coo = tk.Button(self, text="Загрузить файл МК", command=self.upload_file_MK, width=27) #coo
+        self.upload_button_coo.grid(row=2, column=0, padx=10, pady=10)
+
+        analyze_button = tk.Button(self, text="Произвести расчет", command=self.rashet, width=27) #Анализировать телеметрию
+        analyze_button.grid(row=5, column=0,  padx=10, pady=10)
+
+        button_plot_coords = tk.Button(self, text="Графики МК и Дрейфа", command=self.plot, width=27)
+        button_plot_coords.grid(row=4, column=0, padx=10, pady=10)
+
+
+        # Поле для вывода информации, как терминал
+        self.grid_columnconfigure(0, weight=500)  # Первая колонка будет растягиваться
+        self.grid_rowconfigure(11, weight=50)   # Строка с текстовым полем также растягивается
+
+        # Поле для вывода информации, как терминал
+        self.output_text = tk.Text(self, height=16)
+        self.output_text.grid(row=11, column=0, columnspan=3, padx=10, pady=10, sticky="nsew")
+        self.output_text.config(state=tk.DISABLED)  
+
+        # Кнопка отчистки поля
+        analyze_button = tk.Button(self, text="Стереть", command=self.erase, width=27)
+        analyze_button.grid(row=6, column=1,  padx=100, pady=15)
+
+
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_columnconfigure(2, weight=1)
+
+
+
+
+        #-----------------------------------------------------------------------------------------------------------------------------#
+                                                                #Интерфейс управления
+        #-----------------------------------------------------------------------------------------------------------------------------#
+
+
+    
+    def upload_file_MK(self):
+        file_path = filedialog.askopenfilename(
+            title="Выберите файл MK.dat",
+            filetypes=[("DAT files", "*.dat"), ("All files", "*.*")]
+        )
+
+        if file_path:
+            self.print_to_output(f"Файл MK загружен: {file_path}")
+            save_data_to_json("MK", file_path)
+
+            try:
+                with open(file_path, 'r') as f:
+                    lines = f.readlines()
+
+                # Удаляем 1-ю, 2-ю и 3-ю строки (индексы 0, 1, 2)
+                cleaned_lines = [line for i, line in enumerate(lines) if i not in (0, 1, 2)]
+
+                from io import StringIO
+                data = np.loadtxt(StringIO(''.join(cleaned_lines)))
+
+                '''print("▶ Первые 5 значений:")
+                print(data[:5])
+                print("▶ Размерность:", data.shape)'''
+
+                self.print_to_output(f"Пример данных: {data[:5]}")
+                self.print_to_output(f"Всего значений: {len(data)}")
+
+            except Exception as e:
+                self.print_to_output(f"Ошибка при чтении данных из файла: {e}")
+                print("❌ Ошибка при чтении .dat файла:", e)
+
+    def upload_file_dreif(self):
+        file_path = filedialog.askopenfilename(
+            title="Выберите файл Дрейф",
+            filetypes=[("DAT files", "*.dat"), ("All files", "*.*")]
+        )
+
+        if file_path:
+            self.print_to_output(f"Файл Дрейф загружен: {file_path}")
+            save_data_to_json("Дрейф", file_path)
+
+            try:
+                with open(file_path, 'r') as f:
+                    lines = f.readlines()
+
+                # Удаляем первые 3 строки (индексы 0, 1, 2)
+                cleaned_lines = [line for i, line in enumerate(lines) if i not in (0, 1, 2)]
+
+                # Чтение очищенного содержимого
+                from io import StringIO
+                data = np.loadtxt(StringIO(''.join(cleaned_lines)))
+
+                '''  # Вывод для проверки
+                print("▶ Первые 5 значений из файла Дрейф:")
+                print(data[:5])
+                print("▶ Размерность:", data.shape)'''
+
+                self.print_to_output(f"Пример данных: {data[:5]}")
+                self.print_to_output(f"Всего значений: {len(data)}")
+
+            except Exception as e:
+                self.print_to_output(f"Ошибка при чтении файла Дрейф: {e}")
+                print("❌ Ошибка при чтении .dat файла (Дрейф):", e)
+
+
+#-----------------------------------------------------------------------------------------------------------------------------#
+                                                    #Вывод в окно программы
+#-----------------------------------------------------------------------------------------------------------------------------#
+
+
+    
+
+    def print_to_output(self, message):
+        """Метод для вывода информации в поле вывода"""
+        self.output_text.config(state=tk.NORMAL)  # Разрешаем редактирование
+        self.output_text.insert(tk.END, message + "\n")  # Вставляем новое сообщение
+        self.output_text.config(state=tk.DISABLED)  # Возвращаем поле в режим только для чтения
+        self.output_text.yview(tk.END)  # Прокручиваем текст до конца
+    
+    
+
+    def erase(self):
+        """Метод для отчистки поля вывода"""
+        self.output_text.config(state=tk.NORMAL)  # Разрешаем редактирование
+        self.output_text.delete('1.0', tk.END)   # Удаляем содержимое
+        self.output_text.config(state=tk.DISABLED)  # Снова делаем поле только для чтения
+
+    def rashet(self):   
+        self.print_to_output("ЛОХ")
+
+    def plot(self):   
+        self.print_to_output("ЛОХ")
+    
+    
 
 if __name__ == "__main__":
-    main()
+    app = Windows()
+    app.mainloop()
