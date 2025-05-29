@@ -534,42 +534,76 @@ class App(tk.Tk):
             return
 
         try:
-            data = self.drift_data[:, 1]  # можно заменить на другой канал, например :,2
-            taus_all = np.logspace(0, np.log10(len(data)//2), num=100, dtype=int)
-            taus_all = np.unique(taus_all)
-            taus, allan_dev = self.allan_variance(data, self.sampling_rate, taus_all)
+            data = self.drift_data[:, 1]  # канал 1 (второй столбец)
+            fs = self.sampling_rate
+            N = len(data)
+            max_m = N // 2
 
-            plt.figure()
-            plt.loglog(taus, allan_dev, 'b.', label='Девиация Аллана')
+            # Логарифмически распределенные интервалы усреднения
+            m_values = np.unique(np.round(np.logspace(0, np.log10(max_m), 2000)).astype(int))
+            m_values = m_values[m_values > 0]
+            tau = m_values / fs
 
-            n = len(taus)
-            splits = [(0, n//3, 'r', 'ARW'), (n//3, 2*n//3, 'g', 'Bias Instability'), (2*n//3, n, 'm', 'RRW')]
+            adev = []
+            for m in m_values:
+                K = N // m
+                if K < 2:
+                    continue
+                reshaped = data[:K*m].reshape((K, m))
+                means = np.mean(reshaped, axis=1)
+                diffs = np.diff(means)
+                sigma = np.sqrt(np.sum(diffs**2) / (2 * (K - 1)))
+                adev.append(sigma)
 
-            for start, end, color, label in splits:
-                x_fit = taus[start:end]
-                y_fit = allan_dev[start:end]
+            adev = np.array(adev)
+            tau = tau[:len(adev)]
 
-                # Отфильтровываем нули и отрицательные значения
-                valid = (x_fit > 0) & (y_fit > 0)
-                x_fit = x_fit[valid]
-                y_fit = y_fit[valid]
+            # ---- Анализ ----
+            min_idx = np.argmin(adev)
+            tau_min = tau[min_idx]
+            bias_instability = adev[min_idx]
 
-                if len(x_fit) >= 2:
-                    k, b = np.polyfit(np.log10(x_fit), np.log10(y_fit), 1)
-                    fit_curve = 10 ** b * x_fit ** k
-                    plt.loglog(x_fit, fit_curve, color=color, label=f'Аппроксимация {label}')
+            mask_white = tau < tau_min
+            mask_rrw = tau > tau_min
 
-            plt.xlabel('τ, с')
-            plt.ylabel('σ(τ), °/с')
-            plt.title('Аппроксимация Девиации Аллана')
+            ARW = None
+            RRW = None
+
+            plt.figure(figsize=(9, 5))
+            plt.loglog(tau, adev, 'b', label='Данные')
+            plt.scatter(tau_min, bias_instability, c='r', label='Bias Instability')
+
+            # ARW аппроксимация
+            if np.sum(mask_white) >= 2:
+                p_white = np.polyfit(np.log10(tau[mask_white]), np.log10(adev[mask_white]), 1)
+                k_arw, b_arw = p_white
+                y_fit_arw = 10 ** b_arw * tau[mask_white] ** k_arw
+                plt.loglog(tau[mask_white], y_fit_arw, 'g--', label=f'ARW ~ τ^{k_arw:.2f}')
+
+            # RRW аппроксимация
+            if np.sum(mask_rrw) >= 2:
+                p_rrw = np.polyfit(np.log10(tau[mask_rrw]), np.log10(adev[mask_rrw]), 1)
+                k_rrw, b_rrw = p_rrw
+                y_fit_rrw = 10 ** b_rrw * tau[mask_rrw] ** k_rrw
+                plt.loglog(tau[mask_rrw], y_fit_rrw, 'm--', label=f'RRW ~ τ^{k_rrw:.2f}')
+
+            plt.xlabel(r'$\tau$, с')
+            plt.ylabel(r'$\sigma(\tau)$, °/с')
+            plt.title('Аппроксимация девиации Аллана')
             plt.grid(True, which='both')
             plt.legend()
             plt.tight_layout()
             plt.show()
 
-        except Exception as e:
-            self.print_to_output(f"Ошибка аппроксимации: {e}")
+            # Текстовый вывод
+            self.print_to_output(f"Bias Instability: {bias_instability:.4e} °/с при τ = {tau_min:.2f} с")
+            if ARW:
+                self.print_to_output(f"ARW наклон: {k_arw:.2f}, смещение: 10^{b_arw:.2f}")
+            if RRW:
+                self.print_to_output(f"RRW наклон: {k_rrw:.2f}, смещение: 10^{b_rrw:.2f}")
 
+        except Exception as e:
+            self.print_to_output(f"Ошибка при построении или аппроксимации: {e}")
             
     def calculate_allan_parameters(self):
         if self.drift_data is None or self.sampling_rate is None:
