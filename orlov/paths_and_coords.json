@@ -1,14 +1,4 @@
 {
-    "solution": "C:/Users/IOrlo/OneDrive/Рабочий стол/прога НАП/solution.csv",
-    "coo": "C:/Users/IOrlo/OneDrive/Рабочий стол/прога НАП/coo.csv",
-    "true_coords": [
-        2847320.09,
-        2194158.64,
-        5251366.40
-    ],
-    "true_speeds": [
-        0.0,
-        0.0,
-        0.0
-    ]
+    "MK": "C:\\Users\\IOrlo\\OneDrive\\питон\\ИУ2 4 курс РиС на ЭВМ\\Файлы для обработки\\MK.dat",
+    "Дрейф": "C:\\Users\\IOrlo\\OneDrive\\питон\\ИУ2 4 курс РиС на ЭВМ\\Файлы для обработки\\Дрейф.dat"
 }
