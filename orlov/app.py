@@ -90,15 +90,11 @@ class App(tk.Tk):
         self.output_text.delete('1.0', tk.END)   # Удаляем содержимое
         self.output_text.config(state=tk.DISABLED)  # Снова делаем поле только для чтения
 
-
-
     def print_to_output(self, msg):
         self.output_text.config(state=tk.NORMAL)
         self.output_text.insert(tk.END, msg + "\n")
         self.output_text.config(state=tk.DISABLED)
         self.output_text.see(tk.END)
-
-
 
     def upload_file_MK(self):
         file_path = filedialog.askopenfilename(title="Выберите файл MK.dat", filetypes=[("DAT files", "*.dat")])
@@ -116,8 +112,6 @@ class App(tk.Tk):
             except Exception as e:
                 self.print_to_output(f"Ошибка чтения файла: {e}")
 
-
-
     def upload_file_drift(self):
         file_path = filedialog.askopenfilename(title="Выберите файл Дрейф.dat", filetypes=[("DAT files", "*.dat"), ("Все файлы", "*.*")])
         if file_path:
@@ -132,8 +126,6 @@ class App(tk.Tk):
                 self.print_to_output(f"Частота дискретизации (Гц): {self.sampling_rate:.2f}")
             except Exception as e:
                 self.print_to_output(f"Ошибка при загрузке дрейфа: {e}")
-
-
 
     def calculate_nonlinearity(self, mk_values):
         """
@@ -154,8 +146,6 @@ class App(tk.Tk):
         nonlinearity_percent = (max_dev / abs(mean_val)) #* 100
         return nonlinearity_percent
     
-
-
     def rashet(self):
         data = read_json("paths_and_coords.json")
         if "MK" not in data:
@@ -196,12 +186,12 @@ class App(tk.Tk):
             nonlinearity = self.calculate_nonlinearity(mk_values.flatten())
             self.nonlinearity_list = [nonlinearity]
 
-            self.print_to_output(f"Нелинейность МК (канал 3): {nonlinearity:.3f} %")
+            nonlinearity_div_1000 = float(nonlinearity) / 1000  # Явно приводим к float и делим
+            self.print_to_output(f"Нелинейность МК (канал 3): {nonlinearity_div_1000:.6f} %")
 
         except Exception as e:
             self.print_to_output(f"Ошибка при расчёте: {e}")
         
-
     def plot_nonlinearity(self):
         import json
         from io import StringIO
@@ -287,9 +277,6 @@ class App(tk.Tk):
         except Exception as e:
             self.print_to_output(f"Ошибка при построении графиков: {e}")
 
-
-
-
     def show_asymmetry(self):
         import numpy as np
 
@@ -331,12 +318,11 @@ class App(tk.Tk):
                 return
 
             asymmetry = np.nanmean(np.abs(mk_values - mean_val) / mean_val) * (-1)
-            self.print_to_output(f"Асимметрия по 3-му каналу: {asymmetry:.3f} %")
+            asymmetry_div_1000 = float(asymmetry) / 1000  # Делим на 1000
+            self.print_to_output(f"Асимметрия по 3-му каналу: {asymmetry_div_1000:.6f} %")
 
         except Exception as e:
             self.print_to_output(f"Ошибка при расчёте асимметрии: {e}")
-
-
 
     def calculate_zero_offset(self):
         import numpy as np
@@ -401,11 +387,12 @@ class App(tk.Tk):
 
             mean_mk = np.mean(mk_values)
             nonlinearity_per_row = 100 * (mk_values - mean_mk) /( mean_mk * 100)  # в %
-
-            x = range(1, len(nonlinearity_per_row) + 1)
+             # Делим значения на 1000
+            nonlinearity_per_row_scaled = nonlinearity_per_row / 1000
+            x = range(1, len(nonlinearity_per_row_scaled) + 1)
 
             plt.figure(figsize=(8,5))
-            plt.plot(x, nonlinearity_per_row, marker='o', linestyle='-', color='orange')
+            plt.plot(x, nonlinearity_per_row_scaled, marker='o', linestyle='-', color='orange')
             plt.xlabel('Номер строки')
             plt.ylabel('Нелинейность, %')
             plt.title('Нелинейность масштабного коэффициента (3-й канал) по строкам')
@@ -428,8 +415,6 @@ class App(tk.Tk):
         plt.legend()
         plt.grid()
         plt.show()   
-
-
 
     def calculate_zero_offset_drift(self):
         if self.drift_data is None:
@@ -454,7 +439,6 @@ class App(tk.Tk):
         slope_hour = slope * 3600**2    # Переводим в °/ч²
 
         self.print_to_output(f"Тренд угловой скорости по 2-му каналу: {slope_hour:.6f} °/ч²")
-
 
     def allan_variance(self, data, rate, taus=None):
         import numpy as np
